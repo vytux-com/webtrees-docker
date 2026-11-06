@@ -102,6 +102,7 @@ out="$("${compose[@]}" exec -T webtrees webtrees-cli site-setting --list TIMEZON
 if grep -q 'Europe/London' <<<"$out"; then pass "WT_SITE_* applied"; else fail "WT_SITE_TIMEZONE not applied"; fi
 if "${compose[@]}" exec -T webtrees grep -q 'rewrite_urls="1"' data/config.ini.php; then pass "PRETTY_URLS written"; else fail "PRETTY_URLS not written"; fi
 
+# shellcheck disable=SC2016 # expanded inside the container
 procs="$("${compose[@]}" exec -T webtrees sh -c 'for p in $(pgrep -f "^(nginx|php-fpm)"); do awk "/^(Uid|Gid):/{print \$2}" /proc/$p/status; done' | sort -u | tr '\n' ' ')"
 if [ "$procs" = "1000 " ]; then pass "nginx/php-fpm run as PUID/PGID 1000"; else fail "nginx/php-fpm uids/gids: $procs"; fi
 out="$("${compose[@]}" exec -T webtrees stat -c %u:%g data)"
