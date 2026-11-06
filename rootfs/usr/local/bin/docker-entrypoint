@@ -1,34 +1,59 @@
 #!/bin/sh
 # Container entrypoint: prepare the environment, configure webtrees from env,
-# then supervise php-fpm + nginx running as the unprivileged www-data user.
+# then supervise php-fpm + nginx running as an unprivileged user.
+#
+# Started as root (default): runs as PUID:PGID (default 82:82 = www-data).
+# Started as non-root (compose `user:`): runs as that user unchanged.
 set -eu
 
 WT="${WEBTREES_HOME:-/var/www/webtrees}"
 UID_NOW="$(id -u)"
 
 log() { printf '[webtrees] %s\n' "$*" >&2; }
-
-# Run a command as www-data (or as-is when already unprivileged).
-as_www() {
-    if [ "$UID_NOW" = 0 ]; then su-exec www-data "$@"; else "$@"; fi
-}
+die() { log "ERROR: $*"; exit 1; }
 
 # Anything other than the default command: run it directly (e.g. `sh`).
 if [ "${1:-webtrees}" != "webtrees" ]; then
     exec "$@"
 fi
 
-log "webtrees ${WEBTREES_VERSION} (php $(php -r 'echo PHP_VERSION;'), uid ${UID_NOW})"
+if [ "$UID_NOW" = 0 ]; then
+    RUN_UID="${PUID:-82}"
+    RUN_GID="${PGID:-82}"
+    case "$RUN_UID$RUN_GID" in
+        *[!0-9]*) die "PUID and PGID must be numeric (got PUID=$RUN_UID PGID=$RUN_GID)" ;;
+    esac
+    [ "$RUN_UID" != 0 ] || die "PUID=0 is not allowed; webtrees must not run as root"
+    # The code owner must differ, so that PHP cannot modify the application.
+    CODE_UID="$(id -u webtrees)"
+    [ "$RUN_UID" != "$CODE_UID" ] || die "PUID=$RUN_UID is reserved for the owner of the webtrees code"
+else
+    RUN_UID="$UID_NOW"
+    RUN_GID="$(id -g)"
+    if [ -n "${PUID:-}${PGID:-}" ]; then
+        log "note: PUID/PGID are ignored when the container is started as a non-root user"
+    fi
+fi
+export RUN_UID RUN_GID
+
+# Run a command as the runtime user.
+as_user() {
+    if [ "$UID_NOW" = 0 ]; then su-exec "$RUN_UID:$RUN_GID" "$@"; else "$@"; fi
+}
+
+log "webtrees ${WEBTREES_VERSION} (php $(php -r 'echo PHP_VERSION;'), running as ${RUN_UID}:${RUN_GID})"
 
 webtrees-render-config
 
 if [ "$UID_NOW" = 0 ]; then
-    chown -R www-data:www-data /run/webtrees /tmp/nginx
-    # Fix ownership of a freshly mounted (e.g. bind-mounted) data directory.
-    if [ "$(stat -c %U "$WT/data")" != "www-data" ]; then
-        log "fixing ownership of $WT/data"
-        chown -R www-data:www-data "$WT/data"
+    chown -R "$RUN_UID:$RUN_GID" /run/webtrees /tmp/nginx
+    # Fix ownership of a fresh (or previously differently owned) data directory.
+    if [ "$(stat -c %u:%g "$WT/data")" != "$RUN_UID:$RUN_GID" ]; then
+        log "changing ownership of $WT/data to $RUN_UID:$RUN_GID"
+        chown -R "$RUN_UID:$RUN_GID" "$WT/data"
     fi
+elif [ ! -w "$WT/data" ]; then
+    die "$WT/data is not writable by uid $RUN_UID; chown the volume to $RUN_UID:$RUN_GID"
 fi
 
 # --- Optional runtime module installation -----------------------------------
@@ -55,10 +80,10 @@ if [ -n "$wanted" ]; then
 fi
 
 # --- webtrees configuration, database schema, admin user, site settings ----
-as_www php /usr/local/lib/webtrees-docker/configure.php
+as_user php /usr/local/lib/webtrees-docker/configure.php
 
 # --- Start and supervise php-fpm + nginx (unprivileged) ---------------------
 if [ "$UID_NOW" = 0 ]; then
-    exec su-exec www-data webtrees-supervise
+    exec su-exec "$RUN_UID:$RUN_GID" webtrees-supervise
 fi
 exec webtrees-supervise

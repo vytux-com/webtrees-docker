@@ -86,13 +86,13 @@ RUN set -eux; \
     mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"; \
     # Remove the stock nginx configuration; ours lives in /etc/nginx/nginx.conf.
     rm -rf /etc/nginx/http.d /etc/nginx/conf.d /var/www/localhost; \
-    # Unprivileged owner of the application code. www-data (which runs PHP)
-    # can read, but not modify, the code.
-    addgroup -S -g 1000 webtrees; \
-    adduser -S -D -H -u 1000 -G webtrees -h /var/cache/composer -s /sbin/nologin webtrees; \
+    # Unprivileged owner of the application code. The runtime user (PUID,
+    # default www-data) can read, but not modify, the code. Deliberately not
+    # 1000, the usual first user on a host.
+    addgroup -S -g 10001 webtrees; \
+    adduser -S -D -H -u 10001 -G webtrees -h /var/cache/composer -s /sbin/nologin webtrees; \
     mkdir -p /var/cache/composer /run/webtrees; \
-    chown webtrees:webtrees /var/cache/composer; \
-    chown www-data:www-data /run/webtrees
+    chown webtrees:webtrees /var/cache/composer
 
 COPY --from=source --chown=webtrees:webtrees /src/webtrees ${WEBTREES_HOME}
 COPY --chmod=0755 rootfs/usr/local/bin/ /usr/local/bin/
@@ -107,14 +107,17 @@ RUN set -eux; \
       su-exec webtrees webtrees-install-modules ${WEBTREES_MODULES}; \
       rm -rf /var/cache/composer/cache; \
     fi; \
-    # Sanity checks, validated as www-data (logging to /dev/null, as the log
-    # FIFOs only exist at runtime).
+    # Sanity checks, validated as an arbitrary unprivileged uid (logging to
+    # /dev/null, as the log FIFOs only exist at runtime).
     NGINX_ACCESS_LOG=false webtrees-render-config; \
     php -r 'foreach (["gd","intl","zip","exif","pdo_mysql","pdo_pgsql","pdo_sqlite","sqlite3","Zend OPcache"] as $e) { if (!extension_loaded($e)) { fwrite(STDERR, "missing extension $e\n"); exit(1); } }'; \
-    chown -R www-data:www-data /run/webtrees /tmp/nginx; \
-    FPM_ERROR_LOG=/dev/null su-exec www-data php-fpm -t; \
-    su-exec www-data nginx -e stderr -t; \
-    rm -rf /run/webtrees/* /tmp/nginx
+    chown -R 12345:12345 /run/webtrees /tmp/nginx; \
+    FPM_ERROR_LOG=/dev/null su-exec 12345:12345 php-fpm -t; \
+    su-exec 12345:12345 nginx -e stderr -t; \
+    rm -rf /run/webtrees/* /tmp/nginx; \
+    # Writable by any uid (sticky, like /tmp), for `user:` with an arbitrary uid.
+    chown root:root /run/webtrees; \
+    chmod 1777 /run/webtrees
 
 WORKDIR ${WEBTREES_HOME}
 VOLUME ["${WEBTREES_HOME}/data"]

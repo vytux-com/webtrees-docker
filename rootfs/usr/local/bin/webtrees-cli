@@ -5,6 +5,11 @@
 set -eu
 cd "${WEBTREES_HOME:-/var/www/webtrees}"
 if [ "$(id -u)" = 0 ]; then
-    exec su-exec www-data php index.php "$@"
+    # The entrypoint makes data/ owned by the runtime user (PUID:PGID).
+    owner="$(stat -c %u:%g data)"
+    case "$owner" in
+        0:*) echo "webtrees-cli: data/ is owned by root; refusing to run as root" >&2; exit 1 ;;
+    esac
+    exec su-exec "$owner" php index.php "$@"
 fi
 exec php index.php "$@"

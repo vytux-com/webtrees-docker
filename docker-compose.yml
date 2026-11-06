@@ -31,7 +31,7 @@ services:
     cap_drop:
       - ALL
     cap_add:
-      # Only used by the entrypoint (as root) before dropping to www-data,
+      # Only used by the entrypoint (as root) before dropping to PUID:PGID,
       # and by tini to forward stop signals.
       - CHOWN
       - DAC_OVERRIDE

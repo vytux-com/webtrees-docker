@@ -27,6 +27,7 @@ cleanup() {
     fi
     "${compose[@]}" down -v >/dev/null 2>&1 || true
     docker rm -f wtsmoke-sqlite >/dev/null 2>&1 || true
+    docker volume rm wtsmoke-sqlite-data >/dev/null 2>&1 || true
     rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -64,6 +65,8 @@ WEBTREES_PORT=18080
 BASE_URL=http://localhost:18080
 WEBTREES_MODULES=magicsunday/webtrees-fan-chart
 WT_SITE_TIMEZONE=Europe/London
+PUID=1000
+PGID=1000
 EOF
 
 "${compose[@]}" up -d --no-build
@@ -99,8 +102,11 @@ out="$("${compose[@]}" exec -T webtrees webtrees-cli site-setting --list TIMEZON
 if grep -q 'Europe/London' <<<"$out"; then pass "WT_SITE_* applied"; else fail "WT_SITE_TIMEZONE not applied"; fi
 if "${compose[@]}" exec -T webtrees grep -q 'rewrite_urls="1"' data/config.ini.php; then pass "PRETTY_URLS written"; else fail "PRETTY_URLS not written"; fi
 
-procs="$("${compose[@]}" exec -T webtrees ps -o user,args | grep -E 'nginx|php-fpm' | grep -v grep)"
-if grep -vq '^www-data' <<<"$procs"; then fail "processes not running as www-data: $procs"; else pass "nginx/php-fpm run as www-data"; fi
+procs="$("${compose[@]}" exec -T webtrees sh -c 'for p in $(pgrep -f "^(nginx|php-fpm)"); do awk "/^(Uid|Gid):/{print \$2}" /proc/$p/status; done' | sort -u | tr '\n' ' ')"
+if [ "$procs" = "1000 " ]; then pass "nginx/php-fpm run as PUID/PGID 1000"; else fail "nginx/php-fpm uids/gids: $procs"; fi
+out="$("${compose[@]}" exec -T webtrees stat -c %u:%g data)"
+if [ "$out" = "1000:1000" ]; then pass "data owned by PUID:PGID"; else fail "data owned by $out"; fi
+if "${compose[@]}" exec -T --user 1000:1000 webtrees sh -c 'test ! -w composer.json && test ! -w modules_v4 && test ! -w index.php'; then pass "code not writable by runtime user"; else fail "code writable by runtime user"; fi
 
 "${compose[@]}" restart webtrees >/dev/null
 if wait_healthy "$cid"; then pass "healthy after restart"; else fail "unhealthy after restart"; fi
@@ -108,10 +114,19 @@ out="$("${compose[@]}" logs webtrees)"
 if grep -q 'modules already installed' <<<"$out"; then pass "modules not reinstalled on restart"; else fail "modules reinstalled on restart"; fi
 
 ###############################################################################
-echo "== SQLite, read-only root FS, non-root user, all capabilities dropped =="
+echo "== Unsafe PUID values are rejected =="
+for bad in 0 10001 abc; do
+    if timeout 60 docker run --rm -e PUID="$bad" "$IMAGE" >/dev/null 2>&1; then fail "PUID=$bad accepted"; else pass "PUID=$bad rejected"; fi
+done
+
+###############################################################################
+echo "== SQLite, read-only root FS, arbitrary non-root user, all capabilities dropped =="
+docker run --rm --user 0 --entrypoint chown -v wtsmoke-sqlite-data:/var/www/webtrees/data \
+    "$IMAGE" -R 1234:1234 /var/www/webtrees/data
 docker run -d --name wtsmoke-sqlite -p 18081:8080 \
-    --read-only --tmpfs /tmp --tmpfs /run/webtrees:uid=82,gid=82 \
-    --user 82:82 --cap-drop ALL --security-opt no-new-privileges:true \
+    --read-only --tmpfs /tmp --tmpfs /run/webtrees \
+    --user 1234:1234 --cap-drop ALL --security-opt no-new-privileges:true \
+    -v wtsmoke-sqlite-data:/var/www/webtrees/data \
     -e DB_TYPE=sqlite -e BASE_URL=http://localhost:18081 \
     -e WT_USER=admin -e WT_EMAIL=admin@example.com -e WT_PASS=sqlite-secret \
     "$IMAGE" >/dev/null

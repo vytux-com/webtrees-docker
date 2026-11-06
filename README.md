@@ -5,7 +5,8 @@ A lean, hardened container image for [webtrees](https://webtrees.net/) built on
 
 - Official webtrees release zip, verified by SHA-256
 - PHP 8.4 on Alpine with only the required extensions
-- nginx and php-fpm run as the unprivileged `www-data` user under `tini`
+- nginx and php-fpm run as an unprivileged user under `tini`: `www-data` by
+  default, or any UID/GID via `PUID`/`PGID` or compose `user:`
 - Application code is owned by a separate user, so PHP cannot modify it
 - Works with a read-only root filesystem, a non-root user and all capabilities dropped
 - Only `index.php` is executable. `app/`, `data/`, `vendor/`, dotfiles and
@@ -129,26 +130,41 @@ name for build-time installs.
 ## Security model
 
 - The entrypoint starts as root only to fix volume ownership and install
-  runtime modules, then drops to `www-data`. Compose drops all capabilities
-  except the few this needs, and sets `no-new-privileges`.
-- Code in `/var/www/webtrees` belongs to `webtrees` (uid 1000) and is read-only
-  to PHP. Only `data/` is writable.
-- For the strictest setup, bake modules into the image and run it fully
-  unprivileged:
-
-  ```yaml
-  user: "82:82"          # www-data
-  read_only: true
-  cap_drop: [ALL]
-  tmpfs:
-    - /tmp
-    - /run/webtrees:uid=82,gid=82
-  ```
-
-  (Use `WEBTREES_READ_ONLY=true` with the bundled compose file.) If you use a
-  bind mount for `data/`, it must be writable by uid 82.
+  runtime modules, then drops to `PUID:PGID` (see below). Compose drops all
+  capabilities except the few this needs, and sets `no-new-privileges`.
+- Code in `/var/www/webtrees` belongs to `webtrees` (uid 10001) and is
+  read-only to PHP. Only `data/` is writable.
 - nginx hides its version and blocks access to everything except the front
   controller and static assets. webtrees sends its own security headers.
+
+### Choosing the user (PUID/PGID or `user:`)
+
+nginx and php-fpm run as one unprivileged user, which also owns `data/`.
+There are two ways to choose it:
+
+**`PUID` / `PGID` (default `82` / `82`, Alpine's `www-data`).** The container
+starts as root, changes ownership of `data/` to this user if needed, installs
+any runtime modules, then drops privileges for good. Use this to match
+existing files on the host, e.g. `PUID=1000`. Numeric IDs are used directly,
+so no `/etc/passwd` edits are needed and a read-only root filesystem still
+works. `0` and `10001` (the code owner) are rejected.
+
+**Compose `user:` (strictest).** The container never runs as root. Bake
+modules into the image, and make sure `data/` is already owned by that user
+(`chown -R 1000:1000 ./data`), since the container can't fix it:
+
+```yaml
+user: "1000:1000"
+read_only: true
+cap_drop: [ALL]
+security_opt: [no-new-privileges:true]
+tmpfs:
+  - /tmp
+  - /run/webtrees
+```
+
+`PUID`/`PGID` are ignored in this mode. With the bundled compose file, also set
+`WEBTREES_READ_ONLY=true` and remove `cap_add`.
 
 ## Reverse proxy
 

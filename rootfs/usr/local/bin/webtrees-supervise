@@ -1,6 +1,6 @@
 #!/bin/sh
 # Run php-fpm and nginx side by side; exit (so the container restarts) if
-# either one dies. Runs as www-data.
+# either one dies. Runs as the unprivileged runtime user.
 set -eu
 
 log() { printf '[webtrees] %s\n' "$*" >&2; }
