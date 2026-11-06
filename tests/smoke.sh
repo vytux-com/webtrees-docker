@@ -10,8 +10,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d)"
 PROJECT="wtsmoke"
 fails=0
-# webtrees treats curl's default user agent as a robot.
-UA="Mozilla/5.0 (X11; Linux x86_64) webtrees-smoke-test"
+# webtrees treats cookie-less clients with few headers as robots.
+UA="webtrees-smoke-test"
 
 compose=(docker compose -p "$PROJECT" --env-file "$WORK/.env" -f "$ROOT/docker-compose.yml")
 
@@ -43,14 +43,14 @@ wait_healthy() {
 
 expect_status() {
     local expected="$1" url="$2" actual
-    actual="$(curl -A "$UA" -s -o /dev/null -w '%{http_code}' "$url")"
+    actual="$(curl -A "$UA" -b x=y -s -o /dev/null -w '%{http_code}' "$url")"
     if [ "$actual" = "$expected" ]; then pass "$url -> $actual"; else fail "$url -> $actual (expected $expected)"; fi
 }
 
 expect_body() {
     local needle="$1" url="$2"
     local body
-    body="$(curl -A "$UA" -fsSL "$url" || true)"
+    body="$(curl -A "$UA" -b x=y -fsSL "$url" || true)"
     if grep -q "$needle" <<<"$body"; then pass "$url contains '$needle'"; else fail "$url missing '$needle'"; fi
 }
 
@@ -85,7 +85,7 @@ expect_status 404 "$B/modules_v4/webtrees-fan-chart/module.php"
 expect_status 404 "$B/.docker-modules"
 expect_status 403 "$B/healthz"
 
-headers="$(curl -A "$UA" -sS -D - -o /dev/null "$B/login" | tr -d '\r')"
+headers="$(curl -A "$UA" -b x=y -sS -D - -o /dev/null "$B/login" | tr -d '\r')"
 if grep -qix 'server: nginx' <<<"$headers"; then pass "server version hidden"; else fail "server header: $(grep -i '^server' <<<"$headers")"; fi
 if grep -qi '^x-powered-by' <<<"$headers"; then fail "X-Powered-By exposed"; else pass "no X-Powered-By"; fi
 
