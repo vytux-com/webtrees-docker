@@ -1,0 +1,22 @@
+#!/bin/sh
+# Render runtime configuration that cannot be expressed as static files.
+set -eu
+
+mkdir -p /run/webtrees /tmp/nginx
+
+# nginx accepts the same size suffixes as PHP (k/m/g).
+body_size="${NGINX_CLIENT_MAX_BODY_SIZE:-${PHP_POST_MAX_SIZE:-64M}}"
+read_timeout=$(( ${PHP_MAX_EXECUTION_TIME:-60} + 30 ))
+
+case "$(printf '%s' "${NGINX_ACCESS_LOG:-true}" | tr '[:upper:]' '[:lower:]')" in
+    0|false|no|off) access_log=0 ;;
+    *) access_log=1 ;;
+esac
+
+cat > /run/webtrees/nginx-runtime.conf <<EOF
+client_max_body_size ${body_size};
+fastcgi_read_timeout ${read_timeout}s;
+map \$host \$wt_access_log {
+    default ${access_log};
+}
+EOF

@@ -1,0 +1,10 @@
+#!/bin/sh
+# Run the webtrees command-line interface as the web server user, e.g.
+#   docker compose exec webtrees webtrees-cli list
+#   docker compose exec webtrees webtrees-cli user-list
+set -eu
+cd "${WEBTREES_HOME:-/var/www/webtrees}"
+if [ "$(id -u)" = 0 ]; then
+    exec su-exec www-data php index.php "$@"
+fi
+exec php index.php "$@"

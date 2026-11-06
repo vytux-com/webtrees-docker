@@ -1,0 +1,65 @@
+name: webtrees
+
+services:
+  webtrees:
+    build:
+      context: .
+      args:
+        # Modules baked into the image at build time (recommended).
+        WEBTREES_MODULES: ${WEBTREES_BUILD_MODULES:-}
+    image: ${WEBTREES_IMAGE:-webtrees-nginx:local}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # All webtrees options (DB_*, BASE_URL, PRETTY_URLS, WT_*, WT_SITE_*, PHP_*,
+    # WEBTREES_MODULES, ...) are read from .env - see .env.example.
+    env_file: ${WEBTREES_ENV_FILE:-.env}
+    ports:
+      - "${WEBTREES_PORT:-8080}:8080"
+    volumes:
+      - webtrees-data:/var/www/webtrees/data
+      # Modules that are not on Packagist can be mounted individually:
+      # - ./modules/my-module:/var/www/webtrees/modules_v4/my-module:ro
+    tmpfs:
+      - /tmp
+      - /run/webtrees
+    # Set WEBTREES_READ_ONLY=true when not using runtime WEBTREES_MODULES.
+    read_only: ${WEBTREES_READ_ONLY:-false}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # Only used by the entrypoint (as root) before dropping to www-data,
+      # and by tini to forward stop signals.
+      - CHOWN
+      - DAC_OVERRIDE
+      - KILL
+      - SETGID
+      - SETUID
+
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-webtrees}
+      MARIADB_USER: ${DB_USER:-webtrees}
+      MARIADB_PASSWORD: ${DB_PASS:?set DB_PASS in .env}
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+      MARIADB_AUTO_UPGRADE: "1"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  webtrees-data:
+  db-data:
