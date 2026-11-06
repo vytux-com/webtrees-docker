@@ -140,6 +140,9 @@ name for build-time installs.
   user: "82:82"          # www-data
   read_only: true
   cap_drop: [ALL]
+  tmpfs:
+    - /tmp
+    - /run/webtrees:uid=82,gid=82
   ```
 
   (Use `WEBTREES_READ_ONLY=true` with the bundled compose file.) If you use a

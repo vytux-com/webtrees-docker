@@ -69,7 +69,7 @@ if wait_healthy "$cid"; then pass "container healthy"; else fail "container not 
 B=http://localhost:18080
 expect_body  'webtrees' "$B/"
 expect_status 200 "$B/login"
-expect_status 200 "$B/index.php?route=%2Flogin"
+expect_status 308 "$B/index.php?route=%2Flogin"
 expect_status 200 "$B/public/css/webtrees.min.css"
 expect_status 404 "$B/data/config.ini.php"
 expect_status 404 "$B/data/"
@@ -81,7 +81,7 @@ expect_status 404 "$B/modules_v4/webtrees-fan-chart/module.php"
 expect_status 404 "$B/.docker-modules"
 expect_status 403 "$B/healthz"
 
-headers="$(curl -sSI "$B/login" | tr -d '\r')"
+headers="$(curl -sS -D - -o /dev/null "$B/login" | tr -d '\r')"
 if grep -qix 'server: nginx' <<<"$headers"; then pass "server version hidden"; else fail "server header: $(grep -i '^server' <<<"$headers")"; fi
 if grep -qi '^x-powered-by' <<<"$headers"; then fail "X-Powered-By exposed"; else pass "no X-Powered-By"; fi
 
@@ -103,7 +103,7 @@ if "${compose[@]}" logs webtrees | grep -q 'modules already installed'; then pas
 ###############################################################################
 echo "== SQLite, read-only root FS, non-root user, all capabilities dropped =="
 docker run -d --name wtsmoke-sqlite -p 18081:8080 \
-    --read-only --tmpfs /tmp --tmpfs /run/webtrees \
+    --read-only --tmpfs /tmp --tmpfs /run/webtrees:uid=82,gid=82 \
     --user 82:82 --cap-drop ALL --security-opt no-new-privileges:true \
     -e DB_TYPE=sqlite -e BASE_URL=http://localhost:18081 \
     -e WT_USER=admin -e WT_EMAIL=admin@example.com -e WT_PASS=sqlite-secret \
