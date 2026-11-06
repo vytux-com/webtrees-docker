@@ -158,6 +158,14 @@ I18N::init(code: 'en-US', setup: true);
 
 $deadline = time() + (int) env('DB_WAIT_TIMEOUT', '60');
 
+// Like the setup wizard: the SQLite connector requires an existing file.
+if ($config['dbtype'] === DB::SQLITE && $config['dbname'] !== ':memory:') {
+    $sqlite_file = Webtrees::ROOT_DIR . 'data/' . $config['dbname'] . '.sqlite';
+    if (!file_exists($sqlite_file) && !touch($sqlite_file)) {
+        fail('cannot create ' . $sqlite_file);
+    }
+}
+
 while (true) {
     try {
         DB::connect(

@@ -110,7 +110,7 @@ RUN set -eux; \
     # Sanity checks, validated as www-data (logging to /dev/null, as the log
     # FIFOs only exist at runtime).
     NGINX_ACCESS_LOG=false webtrees-render-config; \
-    php -r 'foreach (["gd","intl","zip","exif","pdo_mysql","pdo_pgsql","pdo_sqlite","Zend OPcache"] as $e) { if (!extension_loaded($e)) { fwrite(STDERR, "missing extension $e\n"); exit(1); } }'; \
+    php -r 'foreach (["gd","intl","zip","exif","pdo_mysql","pdo_pgsql","pdo_sqlite","sqlite3","Zend OPcache"] as $e) { if (!extension_loaded($e)) { fwrite(STDERR, "missing extension $e\n"); exit(1); } }'; \
     chown -R www-data:www-data /run/webtrees /tmp/nginx; \
     FPM_ERROR_LOG=/dev/null su-exec www-data php-fpm -t; \
     su-exec www-data nginx -e stderr -t; \
