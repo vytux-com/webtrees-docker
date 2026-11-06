@@ -66,7 +66,8 @@ ENV WEBTREES_VERSION=${WEBTREES_VERSION} \
     FPM_PM_START_SERVERS=2 \
     FPM_PM_MIN_SPARE_SERVERS=1 \
     FPM_PM_MAX_SPARE_SERVERS=3 \
-    FPM_PM_MAX_REQUESTS=500
+    FPM_PM_MAX_REQUESTS=500 \
+    FPM_ERROR_LOG=/run/webtrees/php-fpm.log
 
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 ADD --chmod=0755 \
@@ -106,10 +107,12 @@ RUN set -eux; \
       su-exec webtrees webtrees-install-modules ${WEBTREES_MODULES}; \
       rm -rf /var/cache/composer/cache; \
     fi; \
-    # Sanity checks (render default runtime config, then validate as www-data)
-    webtrees-render-config; \
+    # Sanity checks, validated as www-data (logging to /dev/null, as the log
+    # FIFOs only exist at runtime).
+    NGINX_ACCESS_LOG=false webtrees-render-config; \
     php -r 'foreach (["gd","intl","zip","exif","pdo_mysql","pdo_pgsql","pdo_sqlite","Zend OPcache"] as $e) { if (!extension_loaded($e)) { fwrite(STDERR, "missing extension $e\n"); exit(1); } }'; \
-    su-exec www-data php-fpm -t; \
+    chown -R www-data:www-data /run/webtrees /tmp/nginx; \
+    FPM_ERROR_LOG=/dev/null su-exec www-data php-fpm -t; \
     su-exec www-data nginx -e stderr -t; \
     rm -rf /run/webtrees/* /tmp/nginx
 
