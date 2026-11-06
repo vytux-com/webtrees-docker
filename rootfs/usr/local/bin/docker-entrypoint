@@ -43,11 +43,9 @@ if [ -n "$wanted" ]; then
     elif [ "$UID_NOW" = 0 ]; then
         mkdir -p "$COMPOSER_HOME"
         chown -R webtrees:webtrees "$COMPOSER_HOME"
-        # shellcheck disable=SC2086
-        set -f; su-exec webtrees webtrees-install-modules $wanted; set +f
+        su-exec webtrees webtrees-install-modules "$wanted"
     elif [ -w "$WT/composer.json" ]; then
-        # shellcheck disable=SC2086
-        set -f; webtrees-install-modules $wanted; set +f
+        webtrees-install-modules "$wanted"
     else
         log "ERROR: WEBTREES_MODULES is set but the container is not running as root,"
         log "       so modules cannot be installed at runtime. Bake them into the image"
