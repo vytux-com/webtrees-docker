@@ -108,7 +108,7 @@ RUN set -eux; \
     fi; \
     # Sanity checks (render default runtime config, then validate as www-data)
     webtrees-render-config; \
-    for ext in gd intl zip pdo_mysql pdo_pgsql pdo_sqlite opcache; do php -m | grep -qix "$ext"; done; \
+    php -r 'foreach (["gd","intl","zip","exif","pdo_mysql","pdo_pgsql","pdo_sqlite","Zend OPcache"] as $e) { if (!extension_loaded($e)) { fwrite(STDERR, "missing extension $e\n"); exit(1); } }'; \
     su-exec www-data php-fpm -t; \
     su-exec www-data nginx -e stderr -t; \
     rm -rf /run/webtrees/* /tmp/nginx
