@@ -1,6 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "prConcurrentLimit": 0,
+  "prHourlyLimit": 0,
   "dockerfile": { "enabled": true },
   "customManagers": [
     {
@@ -24,6 +26,24 @@
       "matchPackageNames": ["fisharebest/webtrees"],
       "allowedVersions": "/^\\d+\\.\\d+\\.\\d+$/",
       "labels": ["webtrees"]
+    },
+    {
+      "description": "Stay on supported MariaDB LTS lines; no major jumps",
+      "matchPackageNames": ["mariadb"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "One PR for all GitHub Actions updates; digest pins merge themselves once CI passes",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "matchUpdateTypes": ["pinDigest", "digest", "patch", "minor"],
+      "automerge": true
+    },
+    {
+      "description": "Alpine and PHP base images move together",
+      "matchPackageNames": ["alpine", "php"],
+      "groupName": "base images"
     }
   ]
 }
