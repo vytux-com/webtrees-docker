@@ -1,0 +1,35 @@
+#!/bin/sh
+# Install webtrees modules (composer packages) into the webtrees code tree.
+#
+#   webtrees-install-modules vendor/package[:constraint] [...]
+#
+# Arguments may also be comma/newline separated. Packages of type
+# "webtrees-module"/"webtrees-theme" that use magicsunday's installer plugin
+# are placed in modules_v4/ automatically. Must run as the code owner.
+set -eu
+set -f
+
+cd "${WEBTREES_HOME:-/var/www/webtrees}"
+
+# shellcheck disable=SC2046
+set -- $(printf '%s ' "$@" | tr ',\n\t' '   ')
+if [ "$#" -eq 0 ]; then
+    echo "usage: webtrees-install-modules vendor/package[:constraint] ..." >&2
+    exit 64
+fi
+
+# Let modules that require "fisharebest/webtrees" resolve against this install.
+export COMPOSER_ROOT_VERSION="${WEBTREES_VERSION}"
+
+composer config allow-plugins.magicsunday/webtrees-module-installer-plugin true
+for plugin in $(printf '%s' "${WEBTREES_COMPOSER_ALLOW_PLUGINS:-}" | tr ',' ' '); do
+    composer config "allow-plugins.${plugin}" true
+done
+# webtrees pins some dependency versions that have published advisories; newer
+# composer versions would otherwise refuse to resolve anything on top of them.
+composer config audit.block-insecure false 2>/dev/null || true
+
+echo "[webtrees] installing modules: $*" >&2
+composer require --update-no-dev --no-progress --no-audit --optimize-autoloader "$@"
+
+printf '%s\n' "$@" | sort -u | tr '\n' ' ' | sed 's/ $//' > .docker-modules

@@ -1,0 +1,49 @@
+#!/bin/sh
+# Run php-fpm and nginx side by side; exit (so the container restarts) if
+# either one dies. Runs as the unprivileged runtime user.
+set -eu
+
+log() { printf '[webtrees] %s\n' "$*" >&2; }
+
+# The container's stdout/stderr pipes belong to root and cannot be reopened by
+# path (/dev/stdout) once privileges are dropped. php-fpm and nginx therefore
+# log to FIFOs, which are copied to our inherited stdout/stderr.
+logpipe() {
+    rm -f "$1"
+    mkfifo -m 0600 "$1"
+}
+logpipe /run/webtrees/access.log
+logpipe "$FPM_ERROR_LOG"
+cat /run/webtrees/access.log &
+cat "$FPM_ERROR_LOG" >&2 &
+# Hold the write ends open so the readers never see EOF (e.g. on log reopen).
+exec 3>/run/webtrees/access.log 4>"$FPM_ERROR_LOG"
+
+php-fpm --nodaemonize &
+fpm_pid=$!
+nginx -e stderr -g 'daemon off;' &
+nginx_pid=$!
+
+stopping=0
+shutdown() {
+    stopping=1
+    log "stopping"
+    # QUIT = graceful shutdown for both nginx and php-fpm.
+    kill -QUIT "$nginx_pid" "$fpm_pid" 2>/dev/null || true
+}
+trap shutdown TERM INT QUIT
+
+log "listening on :8080"
+while kill -0 "$fpm_pid" 2>/dev/null && kill -0 "$nginx_pid" 2>/dev/null; do
+    sleep 2 &
+    wait $! || true
+done
+
+if [ "$stopping" = 0 ]; then
+    log "a service exited unexpectedly; shutting down"
+    kill -TERM "$nginx_pid" "$fpm_pid" 2>/dev/null || true
+    wait "$nginx_pid" "$fpm_pid" || true
+    exit 1
+fi
+
+wait "$nginx_pid" "$fpm_pid" || true

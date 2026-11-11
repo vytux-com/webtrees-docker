@@ -1,0 +1,89 @@
+#!/bin/sh
+# Container entrypoint: prepare the environment, configure webtrees from env,
+# then supervise php-fpm + nginx running as an unprivileged user.
+#
+# Started as root (default): runs as PUID:PGID (default 82:82 = www-data).
+# Started as non-root (compose `user:`): runs as that user unchanged.
+set -eu
+
+WT="${WEBTREES_HOME:-/var/www/webtrees}"
+UID_NOW="$(id -u)"
+
+log() { printf '[webtrees] %s\n' "$*" >&2; }
+die() { log "ERROR: $*"; exit 1; }
+
+# Anything other than the default command: run it directly (e.g. `sh`).
+if [ "${1:-webtrees}" != "webtrees" ]; then
+    exec "$@"
+fi
+
+if [ "$UID_NOW" = 0 ]; then
+    RUN_UID="${PUID:-82}"
+    RUN_GID="${PGID:-82}"
+    case "$RUN_UID$RUN_GID" in
+        *[!0-9]*) die "PUID and PGID must be numeric (got PUID=$RUN_UID PGID=$RUN_GID)" ;;
+    esac
+    [ "$RUN_UID" != 0 ] || die "PUID=0 is not allowed; webtrees must not run as root"
+    # The code owner must differ, so that PHP cannot modify the application.
+    CODE_UID="$(id -u webtrees)"
+    [ "$RUN_UID" != "$CODE_UID" ] || die "PUID=$RUN_UID is reserved for the owner of the webtrees code"
+else
+    RUN_UID="$UID_NOW"
+    RUN_GID="$(id -g)"
+    if [ -n "${PUID:-}${PGID:-}" ]; then
+        log "note: PUID/PGID are ignored when the container is started as a non-root user"
+    fi
+fi
+export RUN_UID RUN_GID
+
+# Run a command as the runtime user.
+as_user() {
+    if [ "$UID_NOW" = 0 ]; then su-exec "$RUN_UID:$RUN_GID" "$@"; else "$@"; fi
+}
+
+log "webtrees ${WEBTREES_VERSION} (php $(php -r 'echo PHP_VERSION;'), running as ${RUN_UID}:${RUN_GID})"
+
+webtrees-render-config
+
+if [ "$UID_NOW" = 0 ]; then
+    chown -R "$RUN_UID:$RUN_GID" /run/webtrees /tmp/nginx
+    # Fix ownership of a fresh (or previously differently owned) data directory.
+    if [ "$(stat -c %u:%g "$WT/data")" != "$RUN_UID:$RUN_GID" ]; then
+        log "changing ownership of $WT/data to $RUN_UID:$RUN_GID"
+        chown -R "$RUN_UID:$RUN_GID" "$WT/data"
+    fi
+elif [ ! -w "$WT/data" ]; then
+    die "$WT/data is not writable by uid $RUN_UID; chown the volume to $RUN_UID:$RUN_GID"
+fi
+
+# --- Optional runtime module installation -----------------------------------
+set -f
+# shellcheck disable=SC2046
+wanted="$(printf '%s\n' $(printf '%s' "${WEBTREES_MODULES:-}" | tr ',' ' ') | sed '/^$/d' | sort -u | tr '\n' ' ' | sed 's/ $//')"
+set +f
+if [ -n "$wanted" ]; then
+    installed="$(cat "$WT/.docker-modules" 2>/dev/null || true)"
+    if [ "$wanted" = "$installed" ]; then
+        log "modules already installed: $wanted"
+    elif [ "$UID_NOW" = 0 ]; then
+        mkdir -p "$COMPOSER_HOME"
+        chown -R webtrees:webtrees "$COMPOSER_HOME"
+        su-exec webtrees webtrees-install-modules "$wanted"
+    elif [ -w "$WT/composer.json" ]; then
+        webtrees-install-modules "$wanted"
+    else
+        log "ERROR: WEBTREES_MODULES is set but the container is not running as root,"
+        log "       so modules cannot be installed at runtime. Bake them into the image"
+        log "       instead (build arg WEBTREES_MODULES)."
+        exit 1
+    fi
+fi
+
+# --- webtrees configuration, database schema, admin user, site settings ----
+as_user php /usr/local/lib/webtrees-docker/configure.php
+
+# --- Start and supervise php-fpm + nginx (unprivileged) ---------------------
+if [ "$UID_NOW" = 0 ]; then
+    exec su-exec "$RUN_UID:$RUN_GID" webtrees-supervise
+fi
+exec webtrees-supervise
