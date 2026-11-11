@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 ARG PHP_VERSION=8.4
-ARG ALPINE_VERSION=3.22
+ARG ALPINE_VERSION=3.24
 
 ###############################################################################
 # Stage 1: download and verify the official webtrees release
