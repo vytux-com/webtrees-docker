@@ -211,9 +211,14 @@ docker build --build-arg WEBTREES_MODULES=magicsunday/webtrees-pedigree-chart -t
 IMAGE=webtrees-nginx:test bash tests/smoke.sh
 ```
 
-CI builds and smoke-tests every push. Pushes to `main` and `v*` tags publish a
-multi-arch (amd64/arm64) image to `ghcr.io/vytux-com/webtrees`. The package is
-private by default and can be made public under the package settings on GitHub.
+CI builds and smoke-tests every push. Pushes to `main`, plus a weekly scheduled
+rebuild (to pick up Alpine/PHP security fixes), publish a multi-arch
+(amd64/arm64) image to `ghcr.io/vytux-com/webtrees` tagged `latest`, the
+webtrees version (`2.2.6`), its minor line (`2.2`) and `sha-<commit>`. The
+version comes from `ARG WEBTREES_VERSION` in the Dockerfile. To upgrade
+webtrees, bump that and `WEBTREES_SHA256` (Renovate opens the PR; the checksum
+must be updated by hand). The package is private by default and can be made
+public under the package settings on GitHub.
 
 ## License
 

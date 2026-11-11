@@ -1,0 +1,29 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "dockerfile": { "enabled": true },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "webtrees release pinned in the Dockerfile",
+      "managerFilePatterns": ["/^Dockerfile$/"],
+      "matchStrings": ["ARG WEBTREES_VERSION=(?<currentValue>\\S+)"],
+      "depNameTemplate": "fisharebest/webtrees",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^Dockerfile$/"],
+      "matchStrings": ["ARG PHP_EXTENSION_INSTALLER_VERSION=(?<currentValue>\\S+)"],
+      "depNameTemplate": "mlocati/docker-php-extension-installer",
+      "datasourceTemplate": "github-releases"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchPackageNames": ["fisharebest/webtrees"],
+      "allowedVersions": "/^\\d+\\.\\d+\\.\\d+$/",
+      "labels": ["webtrees"]
+    }
+  ]
+}

@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: ["**"]
-    tags: ["v*"]
   pull_request:
+  schedule:
+    # Weekly rebuild to pick up Alpine/PHP security updates.
+    - cron: "17 3 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -44,7 +46,7 @@ jobs:
 
   publish:
     needs: test
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -60,14 +62,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Read webtrees version
+        id: ver
+        run: |
+          v=$(sed -n 's/^ARG WEBTREES_VERSION=//p' Dockerfile | head -n1)
+          echo "full=$v" >> "$GITHUB_OUTPUT"
+          echo "minor=${v%.*}" >> "$GITHUB_OUTPUT"
+
       - id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
           tags: |
-            type=edge,branch=main
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+            type=raw,value=${{ steps.ver.outputs.full }}
+            type=raw,value=${{ steps.ver.outputs.minor }}
             type=sha
 
       - uses: docker/build-push-action@v7
@@ -77,7 +86,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Always fetch fresh base layers so scheduled rebuilds pick up patches.
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
           provenance: true
           sbom: true
