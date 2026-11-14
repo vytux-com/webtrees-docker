@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.29
 
-ARG PHP_VERSION=8.4
+ARG PHP_VERSION=8.5
 ARG ALPINE_VERSION=3.24
 
 ###############################################################################
