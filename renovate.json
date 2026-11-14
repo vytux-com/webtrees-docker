@@ -19,6 +19,15 @@
       "matchStrings": ["ARG PHP_EXTENSION_INSTALLER_VERSION=(?<currentValue>\\S+)"],
       "depNameTemplate": "mlocati/docker-php-extension-installer",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "PHP base image version (the FROM tag is composed from ARGs, which the dockerfile manager cannot rewrite)",
+      "managerFilePatterns": ["/^Dockerfile$/"],
+      "matchStrings": ["ARG PHP_VERSION=(?<currentValue>\\S+)"],
+      "depNameTemplate": "php",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
     }
   ],
   "packageRules": [
@@ -39,6 +48,12 @@
       "groupName": "github actions",
       "matchUpdateTypes": ["pinDigest", "digest", "patch", "minor"],
       "automerge": true
+    },
+    {
+      "description": "PHP is updated via the PHP_VERSION regex manager instead",
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["php"],
+      "enabled": false
     },
     {
       "description": "Alpine and PHP base images move together",
