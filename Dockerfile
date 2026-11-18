@@ -42,8 +42,14 @@ ARG WEBTREES_VERSION=2.2.6
 ARG WEBTREES_MODULES=""
 ARG WEBTREES_COMPOSER_ALLOW_PLUGINS=""
 ARG PHP_EXTENSION_INSTALLER_VERSION=2.13.2
+# Exact nginx version installed from the Alpine repo and published as an image
+# label. The build fails if the installed nginx differs, so the label is always
+# truthful. CI overrides this with the latest version Alpine ships (see
+# .github/scripts/resolve-nginx-version.sh); the default is for local builds.
+ARG NGINX_VERSION=1.30.7
 
 LABEL org.opencontainers.image.title="webtrees" \
+      com.nginx.version="${NGINX_VERSION}" \
       org.opencontainers.image.description="Lean nginx + php-fpm image for webtrees" \
       org.opencontainers.image.version="${WEBTREES_VERSION}" \
       org.opencontainers.image.licenses="GPL-3.0-or-later" \
@@ -76,7 +82,7 @@ ADD --chmod=0755 \
 
 RUN set -eux; \
     apk upgrade --no-cache; \
-    apk add --no-cache nginx tini su-exec; \
+    apk add --no-cache "nginx~=${NGINX_VERSION}" tini su-exec su-exec; \
     # pdo_sqlite, mbstring, curl, iconv, ctype, dom, xml, session, fileinfo
     # are already compiled into the official image.
     install-php-extensions gd intl zip exif opcache pdo_mysql pdo_pgsql; \
@@ -114,6 +120,7 @@ RUN set -eux; \
     chown -R 12345:12345 /run/webtrees /tmp/nginx; \
     FPM_ERROR_LOG=/dev/null su-exec 12345:12345 php-fpm -t; \
     su-exec 12345:12345 nginx -e stderr -t; \
+    [ "$(nginx -v 2>&1 | sed -n 's|.*nginx/\([0-9.]*\).*|\1|p')" = "${NGINX_VERSION}" ]; \
     rm -rf /run/webtrees/* /tmp/nginx; \
     # Writable by any uid (sticky, like /tmp), for `user:` with an arbitrary uid.
     chown root:root /run/webtrees; \

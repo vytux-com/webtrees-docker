@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
   schedule:
     # Weekly rebuild to pick up Alpine/PHP security updates.
@@ -24,9 +24,16 @@ jobs:
       - name: Lint shell scripts
         run: |
           shellcheck -s sh rootfs/usr/local/bin/*
-          shellcheck tests/smoke.sh
+          shellcheck tests/smoke.sh .github/scripts/resolve-nginx-version.sh
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Resolve nginx version
+        id: nginx
+        run: |
+          v=$(sh .github/scripts/resolve-nginx-version.sh)
+          [ -n "$v" ]
+          echo "version=$v" >> "$GITHUB_OUTPUT"
 
       - name: Build test image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
@@ -34,7 +41,9 @@ jobs:
           context: .
           load: true
           tags: webtrees-nginx:test
-          build-args: WEBTREES_MODULES=magicsunday/webtrees-pedigree-chart
+          build-args: |
+            WEBTREES_MODULES=magicsunday/webtrees-pedigree-chart
+            NGINX_VERSION=${{ steps.nginx.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -69,6 +78,13 @@ jobs:
           echo "full=$v" >> "$GITHUB_OUTPUT"
           echo "minor=${v%.*}" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve nginx version
+        id: nginx
+        run: |
+          v=$(sh .github/scripts/resolve-nginx-version.sh)
+          [ -n "$v" ]
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
@@ -86,6 +102,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: NGINX_VERSION=${{ steps.nginx.outputs.version }}
           # Always fetch fresh base layers so scheduled rebuilds pick up patches.
           pull: true
           no-cache: ${{ github.event_name == 'schedule' }}
