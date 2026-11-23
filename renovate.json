@@ -56,6 +56,12 @@
       "enabled": false
     },
     {
+      "description": "webtrees 2.2.6 fails on PHP 8.6 (SessionDatabaseHandler lacks create_sid(), a deprecation webtrees turns into an exception); stay on 8.5 until webtrees fixes it",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["php"],
+      "allowedVersions": "<8.6"
+    },
+    {
       "description": "Alpine and PHP base images move together",
       "matchPackageNames": ["alpine", "php"],
       "groupName": "base images"
