@@ -56,12 +56,6 @@
       "enabled": false
     },
     {
-      "description": "webtrees 2.2.6 returns HTTP 500 on PHP 8.6 (smoke tests fail); stay on 8.5 until fixed",
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["php"],
-      "allowedVersions": "<8.6"
-    },
-    {
       "description": "Alpine and PHP base images move together",
       "matchPackageNames": ["alpine", "php"],
       "groupName": "base images"
