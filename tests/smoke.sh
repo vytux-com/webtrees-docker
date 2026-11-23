@@ -24,6 +24,12 @@ cleanup() {
         echo "--- logs ---"
         "${compose[@]}" logs --no-color webtrees 2>&1 || true
         docker logs wtsmoke-sqlite 2>&1 || true
+        echo "--- php-fpm log ---"
+        "${compose[@]}" exec -T webtrees cat /run/webtrees/php-fpm.log 2>&1 || true
+        docker exec wtsmoke-sqlite cat /run/webtrees/php-fpm.log 2>&1 || true
+        echo "--- GET / response ---"
+        curl -A "$UA" -b x=y -s http://localhost:18080/ 2>&1 | head -c 6000 || true
+        curl -A "$UA" -b x=y -s http://localhost:18081/ 2>&1 | head -c 6000 || true
     fi
     "${compose[@]}" down -v >/dev/null 2>&1 || true
     docker rm -f wtsmoke-sqlite >/dev/null 2>&1 || true
