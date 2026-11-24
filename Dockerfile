@@ -41,7 +41,7 @@ ARG WEBTREES_VERSION=2.2.6
 # "magicsunday/webtrees-fan-chart:^3.0 magicsunday/webtrees-descendants-chart"
 ARG WEBTREES_MODULES=""
 ARG WEBTREES_COMPOSER_ALLOW_PLUGINS=""
-ARG PHP_EXTENSION_INSTALLER_VERSION=2.13.2
+ARG PHP_EXTENSION_INSTALLER_VERSION=2.13.4
 # Exact nginx version installed from the Alpine repo and published as an image
 # label. The build fails if the installed nginx differs, so the label is always
 # truthful. CI overrides this with the latest version Alpine ships (see
